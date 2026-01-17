@@ -1,66 +1,94 @@
-use notify::{Watcher, RecursiveMode, watcher};
-use std::sync::mpsc::channel;
-use std::time::Duration;
-use std::path::{Path, PathBuf};
+mod events;
+mod manager;
+
 use std::fs;
-use log::{info, error};
+use std::path::PathBuf;
+use events::FileEvent;
+use manager::{Manager, SyncProcess};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::init();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create directories
+    fs::create_dir_all("_mara/a")?;
+    fs::create_dir_all("_mara/b")?;
+    fs::create_dir_all("_mara/c")?;
 
-    let watch_dir = "watch";
-    let synced_dir = "result/synced";
+    // Initialize manager
+    let manager = Manager::new();
 
-    // Erstelle die Ordner, falls sie nicht existieren
-    fs::create_dir_all(watch_dir)?;
-    fs::create_dir_all(synced_dir)?;
+    // Sync Process 1: Unidirectional A -> B
+    // Filter: all .txt files
+    // Target: _mara/b/
+    // Transform: identity (no change)
+    let process1 = SyncProcess::new(
+        |event: &FileEvent| {
+            event.path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|name| name.ends_with(".txt"))
+                .unwrap_or(false)
+        },
+        |event: &FileEvent| {
+            let filename = event.path.file_name()?.to_str()?.to_string();
+            Some(PathBuf::from("_mara/b").join(filename))
+        },
+        |_event, content| Ok(content.to_vec()),
+    );
 
-    info!("Starte Dateiüberwachung für: {}", watch_dir);
+    // Sync Process 2: Bidirectional A <-> C
+    // Filter: all files from _mara/a or _mara/c
+    // Target: opposite directory
+    // Transform: identity
+    // let process2 = SyncProcess::new(
+    //     |event: &FileEvent| {
+    //         let path_str = event.path.to_string_lossy();
+    //         path_str.contains("_mara/a") || path_str.contains("_mara/c")
+    //     },
+    //     |event: &FileEvent| {
+    //         let path_str = event.path.to_string_lossy();
+    //         let filename = event.path.file_name()?.to_str()?.to_string();
+    //
+    //         if path_str.contains("_mara/a") {
+    //             Some(PathBuf::from("_mara/c").join(filename))
+    //         } else if path_str.contains("_mara/c") {
+    //             Some(PathBuf::from("_mara/a").join(filename))
+    //         } else {
+    //             None
+    //         }
+    //     },
+    //     |_event, content| Ok(content.to_vec()),
+    // );
 
-    // Erstelle einen Channel für Dateiänderungen
-    let (tx, rx) = channel();
+    // Sync Process 3: Self-sync with transformation
+    // Filter: only README.txt
+    // Target: same file (self-overwrite)
+    // Transform: convert to uppercase
+    // let process3 = SyncProcess::new(
+    //     |event: &FileEvent| {
+    //         event.path
+    //             .file_name()
+    //             .and_then(|n| n.to_str())
+    //             .map(|name| name == "README.txt")
+    //             .unwrap_or(false)
+    //     },
+    //     |event: &FileEvent| {
+    //         // Self-sync: return same path
+    //         Some(event.path.clone())
+    //     },
+    //     |_event, content| {
+    //         let text = String::from_utf8_lossy(content);
+    //         Ok(text.to_uppercase().as_bytes().to_vec())
+    //     },
+    // );
 
-    // Erstelle einen Watcher
-    let mut watcher = watcher(tx, Duration::from_secs(2))?;
+    // Register all processes and watch paths
+    let manager = manager
+        .register_process(process1)
+        // .register_process(process2)
+        // .register_process(process3)
+        .watch_path("/Users/ba22036/RustroverProjects/mara_watch/_mara");
 
-    // Überwache den watch-Ordner
-    watcher.watch(watch_dir, RecursiveMode::Recursive)?;
+    // Run the manager
+    manager.run()?;
 
-    info!("Überwachung läuft. Drücke Ctrl+C zum Beenden.");
-
-    // Verarbeite Änderungen
-    loop {
-        match rx.recv() {
-            Ok(notify::DebouncedFileSystemEvent::Create(path)) => {
-                info!("Neue Datei erkannt: {:?}", path);
-                move_file_to_synced(&path, synced_dir)?;
-            }
-            Ok(notify::DebouncedFileSystemEvent::Write(path)) => {
-                info!("Datei geändert: {:?}", path);
-                if path.is_file() {
-                    move_file_to_synced(&path, synced_dir)?;
-                }
-            }
-            Ok(_) => {}
-            Err(e) => error!("Fehler beim Überwachen: {}", e),
-        }
-    }
-}
-
-fn move_file_to_synced(file_path: &Path, synced_dir: &str) -> std::io::Result<()> {
-    if file_path.is_file() {
-        let file_name = file_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown");
-
-        let dest_path = PathBuf::from(synced_dir).join(file_name);
-
-        fs::copy(file_path, &dest_path)?;
-        fs::remove_file(file_path)?;
-
-        info!("Datei verschoben: {} -> {}", file_path.display(), dest_path.display());
-    }
     Ok(())
 }
