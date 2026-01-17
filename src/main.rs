@@ -16,16 +16,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manager = Manager::new();
 
     // Sync Process 1: Unidirectional A -> B
-    // Filter: all .txt files
+    // Filter: .txt files from _mara/a only (prevent loops)
     // Target: _mara/b/
     // Transform: identity (no change)
     let process1 = SyncProcess::new(
         |event: &FileEvent| {
-            event.path
+            let path_str = event.path.to_string_lossy();
+            let is_from_a = path_str.contains("_mara/a");
+            let is_txt = event.path
                 .file_name()
                 .and_then(|n| n.to_str())
                 .map(|name| name.ends_with(".txt"))
-                .unwrap_or(false)
+                .unwrap_or(false);
+            is_from_a && is_txt
         },
         |event: &FileEvent| {
             let filename = event.path.file_name()?.to_str()?.to_string();
