@@ -1,11 +1,9 @@
-use crate::events::{FileEvent, EventKind, EventOrigin};
-use notify::{Watcher, RecursiveMode, Result as NotifyResult};
-use notify::recommended_watcher;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use crate::events::{EventKind, EventOrigin, FileEvent};
 use crate::process::SyncProcess;
-use std::io;
+use notify::recommended_watcher;
+use notify::{RecursiveMode, Result as NotifyResult, Watcher};
+use std::fs;
+use std::path::Path;
 
 pub struct Manager {
     watch_paths: Vec<String>,
