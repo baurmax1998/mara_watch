@@ -1,10 +1,12 @@
 mod events;
 mod manager;
+mod process;
 
 use std::fs;
 use std::path::PathBuf;
 use events::{FileEvent, EventOrigin};
-use manager::{Manager, SyncProcess};
+use manager::{Manager};
+use crate::process::SyncProcess;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create directories
