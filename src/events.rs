@@ -33,4 +33,12 @@ impl FileEvent {
         self.origin = origin;
         self
     }
+
+    pub fn new_with_origin(path: PathBuf, event_kind: EventKind, origin: EventOrigin) -> Self {
+        Self {
+            path,
+            event_kind,
+            origin,
+        }
+    }
 }

@@ -110,17 +110,19 @@ impl Manager {
     ) {
         // Check if this path is a target path from a previous operation (Internal origin)
         let mappings = target_mappings.lock().unwrap();
-        let mut event = FileEvent::new(path.clone(), event_kind);
+        let mut origin = EventOrigin::External;
 
         for mapping in mappings.iter() {
             if mapping.target_path == path {
-                event = event.with_origin(EventOrigin::Internal {
+                origin = EventOrigin::Internal {
                     process_name: mapping.process_name.clone(),
-                });
+                };
                 break;
             }
         }
         drop(mappings);
+
+        let event = FileEvent::new_with_origin(path, event_kind, origin);
 
         // Log the event before processing
         let event_kind_str = match event.event_kind {
