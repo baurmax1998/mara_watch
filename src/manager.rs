@@ -9,14 +9,16 @@ type TargetFn = fn(&FileEvent) -> Option<PathBuf>;
 type TransformFn = fn(&FileEvent, &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
 
 pub struct SyncProcess {
+    name: String,
     filter: FilterFn,
     target: TargetFn,
     transform: TransformFn,
 }
 
 impl SyncProcess {
-    pub fn new(filter: FilterFn, target: TargetFn, transform: TransformFn) -> Self {
+    pub fn new(name: &str, filter: FilterFn, target: TargetFn, transform: TransformFn) -> Self {
         Self {
+            name: name.to_string(),
             filter,
             target,
             transform,
@@ -34,13 +36,21 @@ impl SyncProcess {
             return Ok(());
         };
 
+        let event_kind_str = match event.event_kind {
+            EventKind::Create => "CREATE",
+            EventKind::Modify => "MODIFY",
+            EventKind::Delete => "DELETE",
+        };
+
         match event.event_kind {
             EventKind::Create | EventKind::Modify => {
                 let content = fs::read(&event.path)?;
                 let transformed = (self.transform)(event, &content)?;
                 fs::write(&target_path, transformed)?;
                 println!(
-                    "Synced: {} -> {}",
+                    "[{}] {} | {} -> {}",
+                    self.name,
+                    event_kind_str,
                     event.path.display(),
                     target_path.display()
                 );
@@ -48,8 +58,14 @@ impl SyncProcess {
             EventKind::Delete => {
                 if target_path.exists() {
                     fs::remove_file(&target_path)?;
-                    println!("Deleted: {}", target_path.display());
                 }
+                println!(
+                    "[{}] {} | {} (target: {})",
+                    self.name,
+                    event_kind_str,
+                    event.path.display(),
+                    target_path.display()
+                );
             }
         }
 

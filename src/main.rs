@@ -20,6 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Target: _mara/b/
     // Transform: identity (no change)
     let process1 = SyncProcess::new(
+        "A->B (txt files)",
         |event: &FileEvent| {
             let path_str = event.path.to_string_lossy();
             let is_from_a = path_str.contains("_mara/a");
@@ -42,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Target: opposite directory
     // Transform: identity
     // let process2 = SyncProcess::new(
+    //     "A<->C (bidirectional)",
     //     |event: &FileEvent| {
     //         let path_str = event.path.to_string_lossy();
     //         path_str.contains("_mara/a") || path_str.contains("_mara/c")
@@ -66,6 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Target: same file (self-overwrite)
     // Transform: convert to uppercase
     // let process3 = SyncProcess::new(
+    //     "Transform: README.txt to uppercase",
     //     |event: &FileEvent| {
     //         event.path
     //             .file_name()
