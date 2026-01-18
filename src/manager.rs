@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use crate::process::SyncProcess;
+use std::io;
 
 pub struct Manager {
     watch_paths: Vec<String>,
@@ -114,9 +115,60 @@ impl Manager {
 
         println!("EVENT {} {} | {}", event_kind_str, origin_str, event.path.display());
 
+        // Process each sync process
         for process in processes.iter() {
-            if let Err(e) = process.execute(event) {
-                println!("Error processing event: {}", e);
+            // 1. Check if process should handle this event
+            if !process.should_process(event) {
+                continue;
+            }
+
+            // 2. Get target path
+            let Some(target_path) = process.get_target(event) else {
+                continue;
+            };
+
+            // 3. Execute the sync
+            match event.event_kind {
+                EventKind::Create | EventKind::Modify => {
+                    if let Ok(content) = fs::read(&event.path) {
+                        if let Ok(transformed) = process.transform_content(event, &content) {
+                            if let Err(e) = fs::write(&target_path, transformed) {
+                                println!("[{}] Error writing: {}", process.name, e);
+                                continue;
+                            }
+
+                            println!(
+                                "[{}] {} [{}] | {} -> {}",
+                                process.name,
+                                event_kind_str,
+                                origin_str,
+                                event.path.display(),
+                                target_path.display()
+                            );
+                        } else {
+                            println!("[{}] Transform error", process.name);
+                        }
+                    } else {
+                        println!("[{}] Read error", process.name);
+                    }
+                }
+                EventKind::Delete => {
+                    if target_path.exists() {
+                        if let Err(e) = fs::remove_file(&target_path) {
+                            println!("[{}] Delete error: {}", process.name, e);
+                            continue;
+                        }
+                    }
+
+                    println!(
+                        "[{}] {} [{}] | {} (target: {})",
+                        process.name,
+                        event_kind_str,
+                        origin_str,
+                        event.path.display(),
+                        target_path.display()
+                    );
+                }
             }
         }
     }
