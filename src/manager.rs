@@ -5,9 +5,15 @@ use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use std::fs;
 use std::path::Path;
 
+pub struct TargetMapping {
+    pub target_path: std::path::PathBuf,
+    pub process_name: String,
+}
+
 pub struct Manager {
     watch_paths: Vec<String>,
     processes: Vec<SyncProcess>,
+    target_mappings: Vec<TargetMapping>,
 }
 
 impl Manager {
@@ -15,6 +21,7 @@ impl Manager {
         Self {
             watch_paths: Vec::new(),
             processes: Vec::new(),
+            target_mappings: Vec::new(),
         }
     }
 
@@ -48,6 +55,9 @@ impl Manager {
         let processes = std::sync::Arc::new(self.processes);
         let processes_clone = processes.clone();
 
+        let target_mappings = std::sync::Arc::new(std::sync::Mutex::new(self.target_mappings));
+        let target_mappings_clone = std::sync::Arc::clone(&target_mappings);
+
         let watch_paths = self.watch_paths.clone();
 
         let mut watcher = recommended_watcher(move |res: NotifyResult<notify::Event>| {
@@ -56,20 +66,20 @@ impl Manager {
                     notify::EventKind::Create(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                Self::dispatch_event(path.clone(), EventKind::Create, &processes_clone);
+                                Self::dispatch_event(path.clone(), EventKind::Create, &processes_clone, &target_mappings_clone);
                             }
                         }
                     }
                     notify::EventKind::Modify(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                Self::dispatch_event(path.clone(), EventKind::Modify, &processes_clone);
+                                Self::dispatch_event(path.clone(), EventKind::Modify, &processes_clone, &target_mappings_clone);
                             }
                         }
                     }
                     notify::EventKind::Remove(_) => {
                         for path in &event.paths {
-                            Self::dispatch_event(path.clone(), EventKind::Delete, &processes_clone);
+                            Self::dispatch_event(path.clone(), EventKind::Delete, &processes_clone, &target_mappings_clone);
                         }
                     }
                     _ => {}
@@ -96,8 +106,21 @@ impl Manager {
         path: std::path::PathBuf,
         event_kind: EventKind,
         processes: &std::sync::Arc<Vec<SyncProcess>>,
+        target_mappings: &std::sync::Arc<std::sync::Mutex<Vec<TargetMapping>>>,
     ) {
-        let event = FileEvent::new(path, event_kind);
+        // Check if this path is a target path from a previous operation (Internal origin)
+        let mappings = target_mappings.lock().unwrap();
+        let mut event = FileEvent::new(path.clone(), event_kind);
+
+        for mapping in mappings.iter() {
+            if mapping.target_path == path {
+                event = event.with_origin(EventOrigin::Internal {
+                    process_name: mapping.process_name.clone(),
+                });
+                break;
+            }
+        }
+        drop(mappings);
 
         // Log the event before processing
         let event_kind_str = match event.event_kind {
@@ -125,7 +148,16 @@ impl Manager {
                 continue;
             };
 
-            // 3. Execute the sync
+            // 3. Add target mapping
+            {
+                let mut mappings = target_mappings.lock().unwrap();
+                mappings.push(TargetMapping {
+                    target_path: target_path.clone(),
+                    process_name: process.name.clone(),
+                });
+            }
+
+            // 4. Execute the sync
             match event.event_kind {
                 EventKind::Create | EventKind::Modify => {
                     if let Ok(content) = fs::read(&event.path) {
