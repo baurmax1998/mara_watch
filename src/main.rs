@@ -53,7 +53,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let right_origin = match &event.origin {
                 EventOrigin::External => true,
-                EventOrigin::Internal { value: str } => false, // Ignore internal events
+                EventOrigin::Internal { process_name } => {
+                    process_name != "A<->C (bidirectional)"
+                }, // Ignore internal events
             };
 
             right_path && right_origin
