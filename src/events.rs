@@ -29,16 +29,6 @@ impl FileEvent {
         }
     }
 
-    pub fn from_process(path: PathBuf, event_kind: EventKind, process_name: &str) -> Self {
-        Self {
-            path,
-            event_kind,
-            origin: EventOrigin::Internal {
-                process_name: process_name.to_string(),
-            },
-        }
-    }
-
     pub fn with_origin(mut self, origin: EventOrigin) -> Self {
         self.origin = origin;
         self
