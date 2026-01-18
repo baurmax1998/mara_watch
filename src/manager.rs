@@ -56,23 +56,20 @@ impl Manager {
                     notify::EventKind::Create(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let file_event = FileEvent::new(path.clone(), EventKind::Create);
-                                Self::dispatch_event(&file_event, &processes_clone);
+                                Self::dispatch_event(path.clone(), EventKind::Create, &processes_clone);
                             }
                         }
                     }
                     notify::EventKind::Modify(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let file_event = FileEvent::new(path.clone(), EventKind::Modify);
-                                Self::dispatch_event(&file_event, &processes_clone);
+                                Self::dispatch_event(path.clone(), EventKind::Modify, &processes_clone);
                             }
                         }
                     }
                     notify::EventKind::Remove(_) => {
                         for path in &event.paths {
-                            let file_event = FileEvent::new(path.clone(), EventKind::Delete);
-                            Self::dispatch_event(&file_event, &processes_clone);
+                            Self::dispatch_event(path.clone(), EventKind::Delete, &processes_clone);
                         }
                     }
                     _ => {}
@@ -96,9 +93,12 @@ impl Manager {
     }
 
     fn dispatch_event(
-        event: &FileEvent,
+        path: std::path::PathBuf,
+        event_kind: EventKind,
         processes: &std::sync::Arc<Vec<SyncProcess>>,
     ) {
+        let event = FileEvent::new(path, event_kind);
+
         // Log the event before processing
         let event_kind_str = match event.event_kind {
             EventKind::Create => "CREATE",
@@ -116,12 +116,12 @@ impl Manager {
         // Process each sync process
         for process in processes.iter() {
             // 1. Check if process should handle this event
-            if !process.should_process(event) {
+            if !process.should_process(&event) {
                 continue;
             }
 
             // 2. Get target path
-            let Some(target_path) = process.get_target(event) else {
+            let Some(target_path) = process.get_target(&event) else {
                 continue;
             };
 
@@ -129,7 +129,7 @@ impl Manager {
             match event.event_kind {
                 EventKind::Create | EventKind::Modify => {
                     if let Ok(content) = fs::read(&event.path) {
-                        if let Ok(transformed) = process.transform_content(event, &content) {
+                        if let Ok(transformed) = process.transform_content(&event, &content) {
                             if let Err(e) = fs::write(&target_path, transformed) {
                                 println!("[{}] Error writing: {}", process.name, e);
                                 continue;
