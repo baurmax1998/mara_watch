@@ -3,9 +3,7 @@ mod manager;
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
-use events::{FileEvent, EventOrigin, EventKind};
+use events::{FileEvent, EventOrigin};
 use manager::{Manager, SyncProcess};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

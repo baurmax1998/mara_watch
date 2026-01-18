@@ -3,6 +3,8 @@ use notify::{Watcher, RecursiveMode, Result as NotifyResult};
 use notify::recommended_watcher;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 
 type FilterFn = fn(&FileEvent) -> bool;
 type TargetFn = fn(&FileEvent) -> Option<PathBuf>;
@@ -25,7 +27,11 @@ impl SyncProcess {
         }
     }
 
-    pub fn execute(&self, event: &FileEvent) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn execute(
+        &self,
+        event: &FileEvent,
+        sync_map: &Arc<Mutex<HashMap<String, String>>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Filter check
         if !(self.filter)(event) {
             return Ok(());
@@ -52,11 +58,17 @@ impl SyncProcess {
                 let content = fs::read(&event.path)?;
                 let transformed = (self.transform)(event, &content)?;
                 fs::write(&target_path, transformed)?;
+
+                // Track that this target was written by this process
+                let target_path_str = target_path.to_string_lossy().to_string();
+                sync_map
+                    .lock()
+                    .unwrap()
+                    .insert(target_path_str, self.name.clone());
+
                 println!(
-                    "[{}] {} [{}] | {} -> {}",
+                    "[{}] | {} -> {}",
                     self.name,
-                    event_kind_str,
-                    origin_str,
                     event.path.display(),
                     target_path.display()
                 );
@@ -65,11 +77,14 @@ impl SyncProcess {
                 if target_path.exists() {
                     fs::remove_file(&target_path)?;
                 }
+
+                // Remove from tracking
+                let target_path_str = target_path.to_string_lossy().to_string();
+                sync_map.lock().unwrap().remove(&target_path_str);
+
                 println!(
-                    "[{}] {} [{}] | {} (target: {})",
+                    "[{}] | {} (target: {})",
                     self.name,
-                    event_kind_str,
-                    origin_str,
                     event.path.display(),
                     target_path.display()
                 );
@@ -83,6 +98,7 @@ impl SyncProcess {
 pub struct Manager {
     watch_paths: Vec<String>,
     processes: Vec<SyncProcess>,
+    sync_map: Arc<Mutex<HashMap<String, String>>>, // Mapping: target_path -> process_name
 }
 
 impl Manager {
@@ -90,6 +106,7 @@ impl Manager {
         Self {
             watch_paths: Vec::new(),
             processes: Vec::new(),
+            sync_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -122,6 +139,8 @@ impl Manager {
 
         let processes = std::sync::Arc::new(self.processes);
         let processes_clone = processes.clone();
+        let sync_map = self.sync_map.clone();
+        let sync_map_clone = sync_map.clone();
 
         let watch_paths = self.watch_paths.clone();
 
@@ -131,23 +150,37 @@ impl Manager {
                     notify::EventKind::Create(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let file_event = FileEvent::new(path.clone(), EventKind::Create);
-                                Self::dispatch_event(&file_event, &processes_clone);
+                                let mut file_event = FileEvent::new(path.clone(), EventKind::Create);
+                                // Check if this file was written by a process
+                                let path_str = path.to_string_lossy().to_string();
+                                if let Some(process_name) = sync_map_clone.lock().unwrap().get(&path_str) {
+                                    file_event = file_event.with_origin(EventOrigin::Internal {
+                                        process_name: process_name.clone(),
+                                    });
+                                }
+                                Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
                             }
                         }
                     }
                     notify::EventKind::Modify(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let file_event = FileEvent::new(path.clone(), EventKind::Modify);
-                                Self::dispatch_event(&file_event, &processes_clone);
+                                let mut file_event = FileEvent::new(path.clone(), EventKind::Modify);
+                                // Check if this file was written by a process
+                                let path_str = path.to_string_lossy().to_string();
+                                if let Some(process_name) = sync_map_clone.lock().unwrap().get(&path_str) {
+                                    file_event = file_event.with_origin(EventOrigin::Internal {
+                                        process_name: process_name.clone(),
+                                    });
+                                }
+                                Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
                             }
                         }
                     }
                     notify::EventKind::Remove(_) => {
                         for path in &event.paths {
                             let file_event = FileEvent::new(path.clone(), EventKind::Delete);
-                            Self::dispatch_event(&file_event, &processes_clone);
+                            Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
                         }
                     }
                     _ => {}
@@ -173,9 +206,24 @@ impl Manager {
     fn dispatch_event(
         event: &FileEvent,
         processes: &std::sync::Arc<Vec<SyncProcess>>,
+        sync_map: &Arc<Mutex<HashMap<String, String>>>,
     ) {
+        // Log the event before processing
+        let event_kind_str = match event.event_kind {
+            EventKind::Create => "CREATE",
+            EventKind::Modify => "MODIFY",
+            EventKind::Delete => "DELETE",
+        };
+
+        let origin_str = match &event.origin {
+            EventOrigin::External => "[EXT]".to_string(),
+            EventOrigin::Internal { process_name } => format!("[INT:{}]", process_name),
+        };
+
+        println!("EVENT {} {} | {}", event_kind_str, origin_str, event.path.display());
+
         for process in processes.iter() {
-            if let Err(e) = process.execute(event) {
+            if let Err(e) = process.execute(event, sync_map) {
                 println!("Error processing event: {}", e);
             }
         }

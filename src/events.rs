@@ -38,4 +38,9 @@ impl FileEvent {
             },
         }
     }
+
+    pub fn with_origin(mut self, origin: EventOrigin) -> Self {
+        self.origin = origin;
+        self
+    }
 }
