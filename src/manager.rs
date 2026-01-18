@@ -1,5 +1,6 @@
 use crate::events::{EventKind, EventOrigin, FileEvent};
 use crate::process::SyncProcess;
+use notify::event::ModifyKind;
 use notify::recommended_watcher;
 use notify::{RecursiveMode, Result as NotifyResult, Watcher};
 use std::fs;
@@ -60,32 +61,53 @@ impl Manager {
 
         let watch_paths = self.watch_paths.clone();
 
-        let mut watcher = recommended_watcher(move |res: NotifyResult<notify::Event>| {
-            match res {
-                Ok(event) => match event.kind {
-                    notify::EventKind::Create(_) => {
-                        for path in &event.paths {
-                            if path.is_file() {
-                                Self::dispatch_event(path.clone(), EventKind::Create, &processes_clone, &target_mappings_clone);
+        let mut watcher = recommended_watcher(move |res: NotifyResult<notify::Event>| match res {
+            Ok(event) => match event.kind {
+                notify::EventKind::Create(_) => {
+                    for path in &event.paths {
+                        if path.is_file() {
+                            Self::dispatch_event(
+                                path.clone(),
+                                EventKind::Create,
+                                &processes_clone,
+                                &target_mappings_clone,
+                            );
+                        }
+                    }
+                }
+                notify::EventKind::Modify(kind) => {
+                    for path in &event.paths {
+                        if path.is_file() {
+                            match kind {
+                                ModifyKind::Any => {}
+                                ModifyKind::Data(_) => {
+                                    Self::dispatch_event(
+                                        path.clone(),
+                                        EventKind::Modify,
+                                        &processes_clone,
+                                        &target_mappings_clone,
+                                    );
+                                }
+                                ModifyKind::Metadata(_) => {}
+                                ModifyKind::Name(_) => {}
+                                ModifyKind::Other => {}
                             }
                         }
                     }
-                    notify::EventKind::Modify(_) => {
-                        for path in &event.paths {
-                            if path.is_file() {
-                                Self::dispatch_event(path.clone(), EventKind::Modify, &processes_clone, &target_mappings_clone);
-                            }
-                        }
+                }
+                notify::EventKind::Remove(_) => {
+                    for path in &event.paths {
+                        Self::dispatch_event(
+                            path.clone(),
+                            EventKind::Delete,
+                            &processes_clone,
+                            &target_mappings_clone,
+                        );
                     }
-                    notify::EventKind::Remove(_) => {
-                        for path in &event.paths {
-                            Self::dispatch_event(path.clone(), EventKind::Delete, &processes_clone, &target_mappings_clone);
-                        }
-                    }
-                    _ => {}
-                },
-                Err(e) => println!("Watcher error: {}", e),
-            }
+                }
+                _ => {}
+            },
+            Err(e) => println!("Watcher error: {}", e),
         })?;
 
         // Watch all configured paths
@@ -152,7 +174,12 @@ impl Manager {
             EventOrigin::Internal { process_name } => format!("[INT:{}]", process_name),
         };
 
-        println!("EVENT {} {} | {}", event_kind_str, origin_str, event.path.display());
+        println!(
+            "EVENT {} {} | {}",
+            event_kind_str,
+            origin_str,
+            event.path.display()
+        );
 
         // Process each sync process
         for process in processes.iter() {
