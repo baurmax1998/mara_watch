@@ -42,17 +42,6 @@ impl SyncProcess {
             return Ok(());
         };
 
-        let event_kind_str = match event.event_kind {
-            EventKind::Create => "CREATE",
-            EventKind::Modify => "MODIFY",
-            EventKind::Delete => "DELETE",
-        };
-
-        let origin_str = match &event.origin {
-            EventOrigin::External => "EXT".to_string(),
-            EventOrigin::Internal { process_name } => format!("INT[{}]", process_name),
-        };
-
         match event.event_kind {
             EventKind::Create | EventKind::Modify => {
                 let content = fs::read(&event.path)?;
