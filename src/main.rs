@@ -42,26 +42,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Filter: all files from _mara/a or _mara/c
     // Target: opposite directory
     // Transform: identity
-    // let process2 = SyncProcess::new(
-    //     "A<->C (bidirectional)",
-    //     |event: &FileEvent| {
-    //         let path_str = event.path.to_string_lossy();
-    //         path_str.contains("_mara/a") || path_str.contains("_mara/c")
-    //     },
-    //     |event: &FileEvent| {
-    //         let path_str = event.path.to_string_lossy();
-    //         let filename = event.path.file_name()?.to_str()?.to_string();
-    //
-    //         if path_str.contains("_mara/a") {
-    //             Some(PathBuf::from("_mara/c").join(filename))
-    //         } else if path_str.contains("_mara/c") {
-    //             Some(PathBuf::from("_mara/a").join(filename))
-    //         } else {
-    //             None
-    //         }
-    //     },
-    //     |_event, content| Ok(content.to_vec()),
-    // );
+    let process2 = SyncProcess::new(
+        "A<->C (bidirectional)",
+        |event: &FileEvent| {
+            let path_str = event.path.to_string_lossy();
+            path_str.contains("_mara/a") || path_str.contains("_mara/c")
+        },
+        |event: &FileEvent| {
+            let path_str = event.path.to_string_lossy();
+            let filename = event.path.file_name()?.to_str()?.to_string();
+
+            if path_str.contains("_mara/a") {
+                Some(PathBuf::from("_mara/c").join(filename))
+            } else if path_str.contains("_mara/c") {
+                Some(PathBuf::from("_mara/a").join(filename))
+            } else {
+                None
+            }
+        },
+        |_event, content| Ok(content.to_vec()),
+    );
 
     // Sync Process 3: Self-sync with transformation
     // Filter: only README.txt
@@ -89,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Register all processes and watch paths
     let manager = manager
         .register_process(process1)
-        // .register_process(process2)
+        .register_process(process2)
         // .register_process(process3)
         .watch_path("/Users/ba22036/RustroverProjects/mara_watch/_mara");
 
