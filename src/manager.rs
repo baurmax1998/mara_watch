@@ -8,14 +8,11 @@ type FilterFn = fn(&FileEvent) -> bool;
 type TargetFn = fn(&FileEvent) -> Option<PathBuf>;
 type TransformFn = fn(&FileEvent, &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
 
-pub type OnSyncCompleteFn = fn(target_path: &PathBuf, process_name: &str);
-
 pub struct SyncProcess {
     name: String,
     filter: FilterFn,
     target: TargetFn,
     transform: TransformFn,
-    on_sync_complete: Option<OnSyncCompleteFn>,
 }
 
 impl SyncProcess {
@@ -25,13 +22,7 @@ impl SyncProcess {
             filter,
             target,
             transform,
-            on_sync_complete: None,
         }
-    }
-
-    pub fn on_sync_complete(mut self, callback: OnSyncCompleteFn) -> Self {
-        self.on_sync_complete = Some(callback);
-        self
     }
 
     pub fn execute(&self, event: &FileEvent) -> Result<(), Box<dyn std::error::Error>> {
@@ -69,11 +60,6 @@ impl SyncProcess {
                     event.path.display(),
                     target_path.display()
                 );
-
-                // Notify that sync is complete
-                if let Some(callback) = self.on_sync_complete {
-                    callback(&target_path, &self.name);
-                }
             }
             EventKind::Delete => {
                 if target_path.exists() {
@@ -87,11 +73,6 @@ impl SyncProcess {
                     event.path.display(),
                     target_path.display()
                 );
-
-                // Notify that sync is complete
-                if let Some(callback) = self.on_sync_complete {
-                    callback(&target_path, &self.name);
-                }
             }
         }
 

@@ -69,14 +69,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         |_event, content| Ok(content.to_vec()),
-    ).on_sync_complete(|_target_path, process_name| {
-        // Process-Name wird jetzt in den Logs gezeigt
-        println!("  (synced by: {})", process_name);
-    });
+    );
 
     // Register all processes and watch paths
     manager = manager
-        .register_process(process1)
+        // .register_process(process1)
         .register_process(process2)
         .watch_path("/Users/ba22036/RustroverProjects/mara_watch/_mara");
 
