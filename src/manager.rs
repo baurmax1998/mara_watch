@@ -1,4 +1,4 @@
-use crate::events::{FileEvent, EventKind};
+use crate::events::{FileEvent, EventKind, EventOrigin};
 use notify::{Watcher, RecursiveMode, Result as NotifyResult};
 use notify::recommended_watcher;
 use std::fs;
@@ -8,11 +8,14 @@ type FilterFn = fn(&FileEvent) -> bool;
 type TargetFn = fn(&FileEvent) -> Option<PathBuf>;
 type TransformFn = fn(&FileEvent, &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
 
+pub type OnSyncCompleteFn = fn(target_path: &PathBuf, process_name: &str);
+
 pub struct SyncProcess {
     name: String,
     filter: FilterFn,
     target: TargetFn,
     transform: TransformFn,
+    on_sync_complete: Option<OnSyncCompleteFn>,
 }
 
 impl SyncProcess {
@@ -22,7 +25,13 @@ impl SyncProcess {
             filter,
             target,
             transform,
+            on_sync_complete: None,
         }
+    }
+
+    pub fn on_sync_complete(mut self, callback: OnSyncCompleteFn) -> Self {
+        self.on_sync_complete = Some(callback);
+        self
     }
 
     pub fn execute(&self, event: &FileEvent) -> Result<(), Box<dyn std::error::Error>> {
@@ -42,30 +51,47 @@ impl SyncProcess {
             EventKind::Delete => "DELETE",
         };
 
+        let origin_str = match &event.origin {
+            EventOrigin::External => "EXT".to_string(),
+            EventOrigin::Internal { process_name } => format!("INT[{}]", process_name),
+        };
+
         match event.event_kind {
             EventKind::Create | EventKind::Modify => {
                 let content = fs::read(&event.path)?;
                 let transformed = (self.transform)(event, &content)?;
                 fs::write(&target_path, transformed)?;
                 println!(
-                    "[{}] {} | {} -> {}",
+                    "[{}] {} [{}] | {} -> {}",
                     self.name,
                     event_kind_str,
+                    origin_str,
                     event.path.display(),
                     target_path.display()
                 );
+
+                // Notify that sync is complete
+                if let Some(callback) = self.on_sync_complete {
+                    callback(&target_path, &self.name);
+                }
             }
             EventKind::Delete => {
                 if target_path.exists() {
                     fs::remove_file(&target_path)?;
                 }
                 println!(
-                    "[{}] {} | {} (target: {})",
+                    "[{}] {} [{}] | {} (target: {})",
                     self.name,
                     event_kind_str,
+                    origin_str,
                     event.path.display(),
                     target_path.display()
                 );
+
+                // Notify that sync is complete
+                if let Some(callback) = self.on_sync_complete {
+                    callback(&target_path, &self.name);
+                }
             }
         }
 

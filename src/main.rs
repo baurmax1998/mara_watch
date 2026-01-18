@@ -3,7 +3,9 @@ mod manager;
 
 use std::fs;
 use std::path::PathBuf;
-use events::FileEvent;
+use std::sync::{Arc, Mutex};
+use std::collections::HashSet;
+use events::{FileEvent, EventOrigin, EventKind};
 use manager::{Manager, SyncProcess};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,7 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     fs::create_dir_all("_mara/c")?;
 
     // Initialize manager
-    let manager = Manager::new();
+    let mut manager = Manager::new();
 
     // Sync Process 1: Unidirectional A -> B
     // Filter: .txt files from _mara/a only (prevent loops)
@@ -39,14 +41,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Sync Process 2: Bidirectional A <-> C
-    // Filter: all files from _mara/a or _mara/c
+    // Filter: Only external events (ignore events from internal syncs)
     // Target: opposite directory
     // Transform: identity
     let process2 = SyncProcess::new(
         "A<->C (bidirectional)",
         |event: &FileEvent| {
-            let path_str = event.path.to_string_lossy();
-            path_str.contains("_mara/a") || path_str.contains("_mara/c")
+            // Only process external events - ignore internal ones!
+            match &event.origin {
+                EventOrigin::External => {
+                    let path_str = event.path.to_string_lossy();
+                    path_str.contains("_mara/a") || path_str.contains("_mara/c")
+                }
+                EventOrigin::Internal { .. } => false, // Ignore internal events
+            }
         },
         |event: &FileEvent| {
             let path_str = event.path.to_string_lossy();
@@ -61,36 +69,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         },
         |_event, content| Ok(content.to_vec()),
-    );
-
-    // Sync Process 3: Self-sync with transformation
-    // Filter: only README.txt
-    // Target: same file (self-overwrite)
-    // Transform: convert to uppercase
-    // let process3 = SyncProcess::new(
-    //     "Transform: README.txt to uppercase",
-    //     |event: &FileEvent| {
-    //         event.path
-    //             .file_name()
-    //             .and_then(|n| n.to_str())
-    //             .map(|name| name == "README.txt")
-    //             .unwrap_or(false)
-    //     },
-    //     |event: &FileEvent| {
-    //         // Self-sync: return same path
-    //         Some(event.path.clone())
-    //     },
-    //     |_event, content| {
-    //         let text = String::from_utf8_lossy(content);
-    //         Ok(text.to_uppercase().as_bytes().to_vec())
-    //     },
-    // );
+    ).on_sync_complete(|_target_path, process_name| {
+        // Process-Name wird jetzt in den Logs gezeigt
+        println!("  (synced by: {})", process_name);
+    });
 
     // Register all processes and watch paths
-    let manager = manager
+    manager = manager
         .register_process(process1)
         .register_process(process2)
-        // .register_process(process3)
         .watch_path("/Users/ba22036/RustroverProjects/mara_watch/_mara");
 
     // Run the manager
