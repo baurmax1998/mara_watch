@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use crate::events::{EventKind, FileEvent};
 
 type FilterFn = fn(&FileEvent) -> bool;
@@ -25,11 +23,7 @@ impl SyncProcess {
         }
     }
 
-    pub fn execute(
-        &self,
-        event: &FileEvent,
-        sync_map: &Arc<Mutex<HashMap<String, String>>>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn execute(&self, event: &FileEvent) -> Result<(), Box<dyn std::error::Error>> {
         // 1. Filter check
         if !(self.filter)(event) {
             return Ok(());
@@ -46,13 +40,6 @@ impl SyncProcess {
                 let transformed = (self.transform)(event, &content)?;
                 fs::write(&target_path, transformed)?;
 
-                // Track that this target was written by this process
-                let target_path_str = target_path.to_string_lossy().to_string();
-                sync_map
-                    .lock()
-                    .unwrap()
-                    .insert(target_path_str, self.name.clone());
-
                 println!(
                     "[{}] {} -> {}",
                     self.name,
@@ -64,10 +51,6 @@ impl SyncProcess {
                 if target_path.exists() {
                     fs::remove_file(&target_path)?;
                 }
-
-                // Remove from tracking
-                let target_path_str = target_path.to_string_lossy().to_string();
-                sync_map.lock().unwrap().remove(&target_path_str);
 
                 println!(
                     "[{}] {} (target: {})",

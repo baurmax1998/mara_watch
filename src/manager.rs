@@ -3,14 +3,12 @@ use notify::{Watcher, RecursiveMode, Result as NotifyResult};
 use notify::recommended_watcher;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::sync::Arc;
 use crate::process::SyncProcess;
 
 pub struct Manager {
     watch_paths: Vec<String>,
     processes: Vec<SyncProcess>,
-    sync_map: Arc<Mutex<HashMap<String, String>>>, // Mapping: target_path -> process_name
 }
 
 impl Manager {
@@ -18,7 +16,6 @@ impl Manager {
         Self {
             watch_paths: Vec::new(),
             processes: Vec::new(),
-            sync_map: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -51,8 +48,6 @@ impl Manager {
 
         let processes = std::sync::Arc::new(self.processes);
         let processes_clone = processes.clone();
-        let sync_map = self.sync_map.clone();
-        let sync_map_clone = sync_map.clone();
 
         let watch_paths = self.watch_paths.clone();
 
@@ -62,37 +57,23 @@ impl Manager {
                     notify::EventKind::Create(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let mut file_event = FileEvent::new(path.clone(), EventKind::Create);
-                                // Check if this file was written by a process
-                                let path_str = path.to_string_lossy().to_string();
-                                if let Some(process_name) = sync_map_clone.lock().unwrap().get(&path_str) {
-                                    file_event = file_event.with_origin(EventOrigin::Internal {
-                                        process_name: process_name.clone(),
-                                    });
-                                }
-                                Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
+                                let file_event = FileEvent::new(path.clone(), EventKind::Create);
+                                Self::dispatch_event(&file_event, &processes_clone);
                             }
                         }
                     }
                     notify::EventKind::Modify(_) => {
                         for path in &event.paths {
                             if path.is_file() {
-                                let mut file_event = FileEvent::new(path.clone(), EventKind::Modify);
-                                // Check if this file was written by a process
-                                let path_str = path.to_string_lossy().to_string();
-                                if let Some(process_name) = sync_map_clone.lock().unwrap().get(&path_str) {
-                                    file_event = file_event.with_origin(EventOrigin::Internal {
-                                        process_name: process_name.clone(),
-                                    });
-                                }
-                                Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
+                                let file_event = FileEvent::new(path.clone(), EventKind::Modify);
+                                Self::dispatch_event(&file_event, &processes_clone);
                             }
                         }
                     }
                     notify::EventKind::Remove(_) => {
                         for path in &event.paths {
                             let file_event = FileEvent::new(path.clone(), EventKind::Delete);
-                            Self::dispatch_event(&file_event, &processes_clone, &sync_map_clone);
+                            Self::dispatch_event(&file_event, &processes_clone);
                         }
                     }
                     _ => {}
@@ -118,7 +99,6 @@ impl Manager {
     fn dispatch_event(
         event: &FileEvent,
         processes: &std::sync::Arc<Vec<SyncProcess>>,
-        sync_map: &Arc<Mutex<HashMap<String, String>>>,
     ) {
         // Log the event before processing
         let event_kind_str = match event.event_kind {
@@ -135,7 +115,7 @@ impl Manager {
         println!("EVENT {} {} | {}", event_kind_str, origin_str, event.path.display());
 
         for process in processes.iter() {
-            if let Err(e) = process.execute(event, sync_map) {
+            if let Err(e) = process.execute(event) {
                 println!("Error processing event: {}", e);
             }
         }
