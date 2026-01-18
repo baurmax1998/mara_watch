@@ -48,13 +48,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "A<->C (bidirectional)",
         |event: &FileEvent| {
             // Only process external events - ignore internal ones!
-            match &event.origin {
-                EventOrigin::External => {
-                    let path_str = event.path.to_string_lossy();
-                    path_str.contains("_mara/a") || path_str.contains("_mara/c")
-                }
-                EventOrigin::Internal { .. } => false, // Ignore internal events
-            }
+            let path_str = event.path.to_string_lossy();
+            let right_path = path_str.contains("_mara/a") || path_str.contains("_mara/c");
+
+            let right_origin = match &event.origin {
+                EventOrigin::External => true,
+                EventOrigin::Internal { value: str } => false, // Ignore internal events
+            };
+
+            right_path && right_origin
         },
         |event: &FileEvent| {
             let path_str = event.path.to_string_lossy();

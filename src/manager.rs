@@ -113,7 +113,16 @@ impl Manager {
         let mut origin = EventOrigin::External;
 
         for mapping in mappings.iter() {
-            if mapping.target_path == path {
+            let absolute_target = if mapping.target_path.is_absolute() {
+                mapping.target_path.clone()
+            } else {
+                std::env::current_dir()
+                    .ok()
+                    .map(|cwd| cwd.join(&mapping.target_path))
+                    .unwrap_or_else(|| mapping.target_path.clone())
+            };
+
+            if absolute_target == path {
                 origin = EventOrigin::Internal {
                     process_name: mapping.process_name.clone(),
                 };
