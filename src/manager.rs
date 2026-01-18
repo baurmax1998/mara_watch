@@ -109,10 +109,11 @@ impl Manager {
         target_mappings: &std::sync::Arc<std::sync::Mutex<Vec<TargetMapping>>>,
     ) {
         // Check if this path is a target path from a previous operation (Internal origin)
-        let mappings = target_mappings.lock().unwrap();
+        let mut mappings = target_mappings.lock().unwrap();
         let mut origin = EventOrigin::External;
+        let mut matched_index = None;
 
-        for mapping in mappings.iter() {
+        for (index, mapping) in mappings.iter().enumerate() {
             let absolute_target = if mapping.target_path.is_absolute() {
                 mapping.target_path.clone()
             } else {
@@ -126,8 +127,14 @@ impl Manager {
                 origin = EventOrigin::Internal {
                     process_name: mapping.process_name.clone(),
                 };
+                matched_index = Some(index);
                 break;
             }
+        }
+
+        // Remove the matched mapping to prevent false matches in future events
+        if let Some(index) = matched_index {
+            mappings.remove(index);
         }
         drop(mappings);
 
