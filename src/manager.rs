@@ -67,7 +67,7 @@ impl SyncProcess {
                     .insert(target_path_str, self.name.clone());
 
                 println!(
-                    "[{}] | {} -> {}",
+                    "[{}] {} -> {}",
                     self.name,
                     event.path.display(),
                     target_path.display()
@@ -83,7 +83,7 @@ impl SyncProcess {
                 sync_map.lock().unwrap().remove(&target_path_str);
 
                 println!(
-                    "[{}] | {} (target: {})",
+                    "[{}] {} (target: {})",
                     self.name,
                     event.path.display(),
                     target_path.display()
