@@ -182,10 +182,10 @@ impl DokuIndex {
         let mut output = String::from("# Documentation Index\n\n");
 
         for entry in &self.entries {
-            output.push_str(&format!("## File: {}\n", entry.path));
-            output.push_str(&format!("**Path:** {}\n", entry.path));
-            output.push_str(&format!("**Last Updated:** {}\n", entry.last_updated));
-            output.push_str("**Summary:**\n");
+            output.push_str(&format!("## File: {}\n\n", entry.path));
+            output.push_str(&format!("**Path:** {}\n\n", entry.path));
+            output.push_str(&format!("**Last Updated:** {}\n\n", entry.last_updated));
+            output.push_str("**Summary:**\n\n");
             output.push_str(&format!("{}\n", entry.summary));
             output.push_str("\n---\n\n");
         }
@@ -377,9 +377,13 @@ mod tests {
         let content = r#"# Documentation Index
 
 ## File: test.md
+
 **Path:** test.md
+
 **Last Updated:** 2025-01-19 10:30:00
+
 **Summary:**
+
 This is a test summary of the documentation.
 
 ---
@@ -399,17 +403,25 @@ Total Files: 1
         let content = r#"# Documentation Index
 
 ## File: file1.md
+
 **Path:** file1.md
+
 **Last Updated:** 2025-01-19 10:30:00
+
 **Summary:**
+
 First file summary
 
 ---
 
 ## File: file2.md
+
 **Path:** file2.md
+
 **Last Updated:** 2025-01-19 10:30:00
+
 **Summary:**
+
 Second file summary
 
 ---
