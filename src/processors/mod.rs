@@ -2,8 +2,10 @@ pub mod sync_a_to_b;
 pub mod sync_a_to_c;
 pub mod chat_processor;
 pub mod command_processor;
+pub mod todo_processor;
 
 pub use sync_a_to_b::create_sync_a_to_b;
 pub use sync_a_to_c::create_sync_a_to_c;
 pub use chat_processor::create_chat_processor;
 pub use command_processor::create_command_processor;
+pub use todo_processor::create_todo_processor;
