@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use crate::events::FileEvent;
+use super::events::FileEvent;
 
 pub type FilterFn = fn(&FileEvent) -> bool;
 pub type TargetFn = fn(&FileEvent) -> Option<PathBuf>;

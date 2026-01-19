@@ -1,5 +1,5 @@
-use crate::events::{EventKind, EventOrigin, FileEvent};
-use crate::process::SyncProcess;
+use super::events::{EventKind, EventOrigin, FileEvent};
+use super::process::SyncProcess;
 use notify::event::ModifyKind;
 use notify::recommended_watcher;
 use notify::{RecursiveMode, Result as NotifyResult, Watcher};
