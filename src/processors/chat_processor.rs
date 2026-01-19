@@ -1,4 +1,4 @@
-use crate::{FileEvent, EventOrigin, SyncProcess};
+use crate::{FileEvent, EventOrigin, SyncProcess, OpenAIClient};
 
 /// Message struct - represents a single message from a persona
 #[derive(Debug, Clone, PartialEq)]
@@ -108,10 +108,39 @@ impl Chat {
     }
 }
 
+/// Generate mara response using OpenAI
+fn generate_mara_response(chat: &Chat) -> String {
+    // Prepare messages for OpenAI
+    let messages: Vec<(String, String)> = chat
+        .messages
+        .iter()
+        .map(|msg| (msg.persona.clone(), msg.content.clone()))
+        .collect();
+
+    // Try to create OpenAI client and get response
+    match OpenAIClient::new() {
+        Ok(client) => {
+            // Use tokio runtime to execute async function
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            match rt.block_on(client.generate_response(messages)) {
+                Ok(response) => response,
+                Err(e) => {
+                    eprintln!("OpenAI error: {}", e);
+                    "Entschuldigung, ich konnte keine Antwort generieren.".to_string()
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to initialize OpenAI client: {}", e);
+            "Entschuldigung, OpenAI API Key ist nicht konfiguriert.".to_string()
+        }
+    }
+}
+
 /// Chat processor
 /// Filter: .chat files
 /// Target: same file
-/// Transform: parse chat, add mara message, render back
+/// Transform: parse chat, generate mara response with OpenAI, render back
 pub fn create_chat_processor() -> SyncProcess {
     SyncProcess::new(
         "Chat processor",
@@ -140,8 +169,9 @@ pub fn create_chat_processor() -> SyncProcess {
             // Parse the chat
             let mut chat = Chat::parse(&content_str);
 
-            // Add mara message
-            chat.add_message("mara".to_string(), "das ist interessant".to_string());
+            // Generate and add mara message using OpenAI
+            let response = generate_mara_response(&chat);
+            chat.add_message("mara".to_string(), response);
 
             // Render back
             let rendered = chat.render();
