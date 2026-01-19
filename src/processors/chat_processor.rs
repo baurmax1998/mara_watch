@@ -11,7 +11,7 @@ pub fn create_chat_processor() -> SyncProcess {
             let filename = event.path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map(|name| name == "chat.txt")
+                .map(|name| name.ends_with(".chat"))
                 .unwrap_or(false);
 
             let right_origin = match &event.origin {
