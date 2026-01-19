@@ -16,12 +16,23 @@ struct OpenAIRequest {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIChoice {
-    message: OpenAIMessage,
+    #[serde(default)]
+    message: Option<OpenAIMessage>,
+    #[serde(default)]
+    text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponse {
+    #[serde(default)]
     choices: Vec<OpenAIChoice>,
+    #[serde(default)]
+    error: Option<OpenAIError>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIError {
+    message: String,
 }
 
 pub struct OpenAIClient {
@@ -58,7 +69,7 @@ impl OpenAIClient {
         let request = OpenAIRequest {
             model: self.model.clone(),
             messages: openai_messages,
-            temperature: 0.7,
+            temperature: 1.0,
         };
 
         let client = reqwest::Client::new();
@@ -70,14 +81,25 @@ impl OpenAIClient {
             .await
             .map_err(|e| format!("Request failed: {}", e))?;
 
-        let data: OpenAIResponse = response
-            .json()
+        let status = response.status();
+        let text = response
+            .text()
             .await
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
+            .map_err(|e| format!("Failed to get response text: {}", e))?;
 
+        let data: OpenAIResponse = serde_json::from_str(&text)
+            .map_err(|e| format!("Failed to parse response: {} - Response: {}", e, text))?;
+
+        // Check for API errors
+        if let Some(err) = data.error {
+            return Err(format!("OpenAI API error: {}", err.message));
+        }
+
+        // Extract response content
         data.choices
             .first()
-            .map(|choice| choice.message.content.clone())
-            .ok_or_else(|| "No response from OpenAI".to_string())
+            .and_then(|choice| choice.message.as_ref().map(|m| m.content.clone()))
+            .or_else(|| data.choices.first().and_then(|choice| choice.text.clone()))
+            .ok_or_else(|| format!("No response content from OpenAI. Status: {}", status))
     }
 }
