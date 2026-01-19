@@ -55,19 +55,40 @@ impl TodoLog {
 
         let mut active_todos = Vec::new();
         let mut completed_todos = Vec::new();
+        let mut new_todos = Vec::new();
+        let mut in_new_todo_section = false;
         let mut in_completed_section = false;
 
         for line in lines {
             let trimmed = line.trim();
 
-            // Skip section headers and empty lines
-            if trimmed.is_empty() || trimmed.starts_with("Neues Todo:") || trimmed.starts_with("Todos:") {
+            // Check if we're in the "Neues Todo:" section
+            if trimmed.starts_with("Neues Todo:") {
+                in_new_todo_section = true;
+                in_completed_section = false;
+                continue;
+            }
+
+            // Check if we're starting the "Todos:" section
+            if trimmed.starts_with("Todos:") {
+                in_new_todo_section = false;
+                continue;
+            }
+
+            // Skip empty lines
+            if trimmed.is_empty() {
                 continue;
             }
 
             // Check for separator between active and completed todos
             if trimmed.starts_with("-----------------") {
                 in_completed_section = true;
+                continue;
+            }
+
+            // If in new todo section and not empty, add as new todo
+            if in_new_todo_section && !trimmed.is_empty() {
+                new_todos.push(trimmed.to_string());
                 continue;
             }
 
@@ -91,10 +112,17 @@ impl TodoLog {
             }
         }
 
-        // Add active todos first, then completed todos
+        // Add new todos first (not in completed section)
+        for text in new_todos {
+            log.add_entry(TodoEntry::new(text));
+        }
+
+        // Add active todos
         for entry in active_todos {
             log.add_entry(entry);
         }
+
+        // Add completed todos
         for entry in completed_todos {
             log.add_entry(entry);
         }
@@ -173,7 +201,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_single_todo() {
+    fn test_parse_single_existing_todo() {
         let content = "Neues Todo:\n\nTodos:\n[] Rasen mähen\n";
         let log = TodoLog::parse(content);
         assert_eq!(log.entries.len(), 1);
@@ -182,12 +210,23 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_multiple_todos() {
+    fn test_parse_multiple_existing_todos() {
         let content = "Neues Todo:\n\nTodos:\n[] Rasen mähen\n[] Pflanzen gießen\n";
         let log = TodoLog::parse(content);
         assert_eq!(log.entries.len(), 2);
         assert_eq!(log.entries[0].text, "Rasen mähen");
         assert_eq!(log.entries[1].text, "Pflanzen gießen");
+    }
+
+    #[test]
+    fn test_parse_new_todo_input() {
+        let content = "Neues Todo:\nNeues Item hinzufügen\n\nTodos:\n[] Rasen mähen\n";
+        let log = TodoLog::parse(content);
+        assert_eq!(log.entries.len(), 2);
+        assert_eq!(log.entries[0].text, "Neues Item hinzufügen");
+        assert_eq!(log.entries[0].completed, false);
+        assert_eq!(log.entries[1].text, "Rasen mähen");
+        assert_eq!(log.entries[1].completed, false);
     }
 
     #[test]
