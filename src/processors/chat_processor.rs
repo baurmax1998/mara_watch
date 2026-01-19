@@ -32,15 +32,24 @@ impl Chat {
 
     /// Parse content into Chat
     /// Format: <persona>:\n<content>\n------
+    /// If content doesn't have a persona, it's treated as "User"
     pub fn parse(content: &str) -> Self {
         let mut chat = Chat::new();
         let lines: Vec<&str> = content.lines().collect();
         let mut i = 0;
 
         while i < lines.len() {
-            // Look for persona line (ends with :)
-            if lines[i].ends_with(':') && !lines[i].trim().is_empty() {
-                let persona = lines[i].trim_end_matches(':').to_string();
+            let line = lines[i].trim();
+
+            // Skip empty lines and separators
+            if line.is_empty() || line.starts_with("------") {
+                i += 1;
+                continue;
+            }
+
+            // Check if this line has a persona (ends with :)
+            if line.ends_with(':') {
+                let persona = line.trim_end_matches(':').to_string();
                 let mut content_lines = Vec::new();
                 i += 1;
 
@@ -50,13 +59,13 @@ impl Chat {
                     i += 1;
                 }
 
-                let content = content_lines
+                let msg_content = content_lines
                     .join("\n")
                     .trim()
                     .to_string();
 
-                if !content.is_empty() {
-                    chat.add_message(persona, content);
+                if !msg_content.is_empty() {
+                    chat.add_message(persona, msg_content);
                 }
 
                 // Skip separator line
@@ -64,7 +73,25 @@ impl Chat {
                     i += 1;
                 }
             } else {
+                // No persona, treat as User message
+                let mut content_lines = vec![line];
                 i += 1;
+
+                // Collect until separator or end
+                while i < lines.len() && !lines[i].trim().starts_with("------") {
+                    content_lines.push(lines[i].trim());
+                    i += 1;
+                }
+
+                let msg_content = content_lines.join("\n").trim().to_string();
+                if !msg_content.is_empty() {
+                    chat.add_message("User".to_string(), msg_content);
+                }
+
+                // Skip separator line
+                if i < lines.len() && lines[i].trim().starts_with("------") {
+                    i += 1;
+                }
             }
         }
 
