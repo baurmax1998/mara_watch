@@ -1,5 +1,5 @@
 use std::fs;
-use mara_watch::{Manager, create_sync_a_to_b, create_sync_a_to_c, create_chat_processor, create_persona_parser};
+use mara_watch::{Manager, create_sync_a_to_b, create_sync_a_to_c, create_chat_processor};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create directories
@@ -15,7 +15,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register_process(create_sync_a_to_b())
         .register_process(create_sync_a_to_c())
         .register_process(create_chat_processor())
-        .register_process(create_persona_parser())
         .watch_path("/Users/ba22036/RustroverProjects/mara_watch/_mara");
 
     // Run the manager
