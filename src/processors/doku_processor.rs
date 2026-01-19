@@ -228,7 +228,7 @@ pub fn create_doku_processor() -> SyncProcess {
             let filename = event.path
                 .file_name()
                 .and_then(|n| n.to_str())
-                .map(|name| name.ends_with(".md"))
+                .map(|name| name.ends_with(".md") && !name.ends_with("index.md"))
                 .unwrap_or(false);
 
             let right_origin = match &event.origin {
@@ -245,7 +245,7 @@ pub fn create_doku_processor() -> SyncProcess {
             let dir = event.path.parent()?;
 
             // Look for a .doku file in the same directory
-            let doku_path = dir.join("index.doku");
+            let doku_path = dir.join("index.md");
             Some(doku_path)
         },
         |event, _content| {
